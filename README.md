@@ -5,8 +5,7 @@
 This package provides a comprehensive suite of **Standard Drawing Tools** for the [Lightweight Charts v5+](https://github.com/tradingview/lightweight-charts) plugin system. It includes the **Trend Line**, **Ray**, **Arrow**, **Extended Line**, **Horizontal Line**, **Horizontal Ray**, **Vertical Line**, **Cross Line**, and **Callout** tools. It is part of a modular, high-performance **drop-in replacement** suite for the legacy [v3.8 Line Tools Build](https://github.com/difurious/lightweight-charts-line-tools).
 
 ## 🎥 Video Demo
-
-**Coming Soon!**
+https://github.com/user-attachments/assets/900a6759-d0cd-42e5-a09c-7ed0d94bd42e
 
 
 ## ⚠️ Prerequisites
