@@ -21,7 +21,9 @@ import {
 	PriceAxisLabelStackingManager,
 	LineEnd,
 	HitTestResult,
-	CompositeRenderer
+	CompositeRenderer,
+	getToolCullingState,
+	OffScreenState,
 } from 'lightweight-charts-line-tools-core';
 import { TrendLineOptionDefaults } from './LineToolTrendLine';
 
@@ -134,6 +136,49 @@ export class LineToolVerticalLine<HorzScaleItem> extends BaseLineTool<HorzScaleI
 
 		console.log(`VerticalLine Tool created with ID: ${this.id()}`);
 	}
+
+	/**
+	 * Calculates the vertical line's visibility based on its time coordinate.
+	 * 
+	 * Because a vertical line is conceptually infinite in the price (Y) dimension, 
+	 * this override informs the culling engine to only hide the tool if its 
+	 * timestamp (X) is completely outside the visible horizontal range.
+	 * 
+	 * @protected
+	 * @override
+	 */
+	protected override updateCullingState(): void {
+		const points = this.points();
+		const options = this.options();
+
+		// --- CULLING IMPLEMENTATION START ---
+		// We use the single point check, as the tool is conceptually an infinite line.
+
+		/**
+		 * CULLING CONFIGURATION
+		 *
+		 * We treat this as a single point that extends infinitely in the vertical direction.
+		 * We pass `{ horizontal: false, vertical: true }` to the culler.
+		 * This tells the engine: "Only hide this tool if the X-coordinate (Time) is off-screen."
+		 * The Y-coordinate (Price) is ignored for culling because the line spans all prices.
+		 */
+
+		/**
+		 * We pass '{ horizontal: false, vertical: true }' to the culler.
+		 * This tells the engine: "Only hide this tool if the X-coordinate (Time) is off-screen."
+		 * The Y-coordinate (Price) is ignored for culling because the line spans all prices.
+		 */
+		const cullingState = getToolCullingState(
+			points, 
+			this, 
+			options.line.extend, 
+			{ horizontal: false, vertical: true }
+		);
+
+		// Update the core's flag based on the geometric result
+		this._setIsCulled(cullingState !== OffScreenState.Visible);
+		// --- CULLING IMPLEMENTATION END ---
+	}	
 
 	/**
 	 * Performs the hit test for the Vertical Line.

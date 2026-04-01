@@ -14,8 +14,6 @@ import {
 	SegmentRenderer,
 	TextRenderer,
 	AnchorPoint,
-	OffScreenState,
-	getToolCullingState,
 	LineJoin,
 	LineCap,
 	LineOptions,
@@ -96,28 +94,18 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 			return;
 		}
 
+		/**
+		 * CULLING CHECK
+		 * We simply query the pre-calculated state from the Model.
+		 */
+		if (this._tool.isCulled()) {
+			return;
+		}
+
 		// --- GET VALIDATED CHART DRAWING HEIGHT ---
 		// Use the validated method to get the definitive height of the drawing pane of the chart area only.
 		const paneDrawingHeight = this._tool.getChartDrawingHeight();
 		//const paneDrawingWidth = this._tool.getChartDrawingWidth();
-
-		// --- CULLING IMPLEMENTATION START ---
-		// We use the single point check, as the tool is conceptually an infinite line.
-
-		/**
-		 * CULLING CONFIGURATION
-		 *
-		 * We treat this as a single point that extends infinitely in the vertical direction.
-		 * We pass `{ horizontal: false, vertical: true }` to the culler.
-		 * This tells the engine: "Only hide this tool if the X-coordinate (Time) is off-screen."
-		 * The Y-coordinate (Price) is ignored for culling because the line spans all prices.
-		 */
-		const cullingState = getToolCullingState(points, this._tool as BaseLineTool<HorzScaleItem>, options.line.extend, { horizontal: false, vertical: true });
-		if (cullingState !== OffScreenState.Visible) {
-			//console.log('vertical line culled')
-			return; // Exit if culled
-		}
-		// --- CULLING IMPLEMENTATION END ---
 
 		// 1. Convert the single logical point (P1) to a screen anchor.
 		// We can use the base implementation to get the screen coordinate of P1.

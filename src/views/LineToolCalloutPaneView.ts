@@ -81,20 +81,15 @@ export class LineToolCalloutPaneView<HorzScaleItem> extends LineToolPaneView<Hor
 			return;
 		}
 		
-		// 1. CULLING: Callout is a segment, so we rely on the core geometric culling.
-		const points = this._tool.points();
-
 		/**
-         * 1. CULLING & VISIBILITY CHECK
-         *
-         * Even though the Callout is complex, we treat the Stem (segment P0-P1) as the
-         * primary object for culling. We use the core geometric culler to check visibility.
-         */
-		const cullingState = getToolCullingState(points, this._tool as BaseLineTool<HorzScaleItem>, options.line.extend);
-		
-		if (cullingState !== OffScreenState.Visible) {
-			//console.log('callout culled')
-			return; // Exit if culled
+		 * CULLING CHECK
+		 * 
+		 * We query the Model to see if the Callout's Stem or anchor points are 
+		 * currently on screen. If culled, we skip the expensive text measurement 
+		 * and rendering logic.
+		 */
+		if (this._tool.isCulled()) {
+			return;
 		}
 
 		// 2. Coordinate Conversion

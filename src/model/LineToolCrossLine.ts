@@ -24,7 +24,10 @@ import {
 	LineOptions,
 	PaneCursorType,
 	CompositeRenderer,
-	HitTestResult
+	HitTestResult,
+	getToolCullingState,
+	OffScreenState,
+	SinglePointOrientation,
 } from 'lightweight-charts-line-tools-core';
 
 import { LineToolCrossLinePaneView } from '../views/LineToolCrossLinePaneView';
@@ -223,4 +226,55 @@ export class LineToolCrossLine<HorzScaleItem> extends BaseLineTool<HorzScaleItem
 	public override maxAnchorIndex(): number {
 		return 0;
 	}
+
+	/**
+	 * Calculates the Cross Line's visibility based on its intersection point.
+	 * 
+	 * ### Tutorial Note on Cross Line Culling
+	 * A Cross Line is infinite in both the horizontal (Time) and vertical (Price) 
+	 * dimensions. 
+	 * 
+	 * To handle this, we pass a dual orientation `{ horizontal: true, vertical: true }`. 
+	 * This instructs the culling engine that the tool is only "Off-Screen" if its 
+	 * anchor point is outside the viewport in BOTH dimensions (e.g., if the point 
+	 * is both to the left of the time scale AND above the price scale).
+	 * 
+	 * As long as the crosshair lines intersect the visible area of the chart 
+	 * at any point, the tool remains unculled.
+	 * 
+	 * @protected
+	 * @override
+	 */
+	protected override updateCullingState(): void {
+		const points = this.points();
+		const options = this.options();
+
+		// --- CULLING IMPLEMENTATION START ---
+
+		/**
+		 * CULLING CONFIGURATION
+		 * 
+		 * By setting both horizontal and vertical orientation to true, we ensure 
+		 * the engine treats this single point as two intersecting infinite lines.
+		 */
+		const orientation: SinglePointOrientation = {
+			horizontal: true,
+			vertical: true,
+		};
+
+		const cullingState = getToolCullingState(
+			points, 
+			this, 
+			options.line.extend, 
+			orientation
+		);
+
+		/**
+		 * The tool is only culled if the core engine returns a state 
+		 * other than 'Visible'.
+		 */
+		this._setIsCulled(cullingState !== OffScreenState.Visible);
+
+		// --- CULLING IMPLEMENTATION END ---
+	}	
 }

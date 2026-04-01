@@ -20,7 +20,9 @@ import {
 	LineEnd,
 	TextOptions,
 	BackgroundOptions,
-	PaneCursorType
+	PaneCursorType,
+	getToolCullingState,
+	OffScreenState,
 } from 'lightweight-charts-line-tools-core';
 
 // Import the base class model and its default options structure
@@ -199,6 +201,52 @@ export class LineToolCallout<HorzScaleItem> extends LineToolTrendLine<HorzScaleI
 	 */
 	public override normalize(): void {
 		// Do nothing. Prevent the callout points from being swapped based on time.
+	}
+
+	/**
+	 * Calculates the Callout's visibility based on its Stem line (P0 to P1).
+	 * 
+	 * ### Tutorial Note on Callout Culling
+	 * Even though a Callout involves a complex text box, its geometric visibility 
+	 * is primarily determined by the "Stem"—the line segment connecting the 
+	 * pointer (P0) to the text anchor (P1).
+	 * 
+	 * This method uses the core culling engine to perform a segment intersection 
+	 * check. If any part of the Stem or the anchor points are within the viewport, 
+	 * the tool is marked as visible. 
+	 * 
+	 * Since Callouts do not typically extend infinitely, the engine uses 
+	 * standard Axis-Aligned Bounding Box (AABB) logic here.
+	 * 
+	 * @protected
+	 * @override
+	 */
+	protected override updateCullingState(): void {
+		const points = this.points();
+		const options = this.options();
+
+		// --- CULLING IMPLEMENTATION START ---
+
+		/**
+		 * CULLING CONFIGURATION
+		 * 
+		 * We treat the Callout as a finite 2-point segment. We pass 
+		 * the 'extend' options (which are false by default for Callouts) 
+		 * to the core engine.
+		 */
+		const cullingState = getToolCullingState(
+			points, 
+			this, 
+			options.line.extend
+		);
+
+		/**
+		 * If the culling engine returns anything other than 'Visible', 
+		 * we mark the tool as culled.
+		 */
+		this._setIsCulled(cullingState !== OffScreenState.Visible);
+
+		// --- CULLING IMPLEMENTATION END ---
 	}
 
 	// NOTE: All core logic (hitTest, shift constraints, normalize, etc.) is inherited from LineToolTrendLine.

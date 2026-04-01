@@ -34,7 +34,9 @@ import {
 	Point,
 	InteractionPhase,
 	PriceAxisLabelStackingManager,
-	ConstraintResult
+	ConstraintResult,
+	getToolCullingState,
+	OffScreenState,
 } from 'lightweight-charts-line-tools-core';
 
 import { LineToolTrendLinePaneView } from '../views/LineToolTrendLinePaneView';
@@ -396,4 +398,58 @@ export class LineToolTrendLine<HorzScaleItem> extends BaseLineTool<HorzScaleItem
 		
 		return hitResult;
 	}
+
+
+	/**
+	 * Calculates the Trend Line's visibility based on its geometric points and potential extensions.
+	 * 
+	 * ### Tutorial Note on Trend Line Culling
+	 * A Trend Line can be a simple finite segment, a Ray (infinite in one direction), or 
+	 * an Extended Line (infinite in both directions). 
+	 * 
+	 * Because these tools can exist "on-screen" even when their anchor points are "off-screen" 
+	 * (e.g., a Ray passing through the viewport from a distance), we cannot use a simple 
+	 * bounding box check.
+	 * 
+	 * This method passes the `options.line.extend` flags to the core culling engine. 
+	 * This instructs the engine to use robust parametric clipping math (Slab-Clipping) 
+
+	 * to determine if any part of the infinite line projection intersects the current viewport.
+	 * 
+	 * @protected
+	 * @override
+	 */
+	protected override updateCullingState(): void {
+		const points = this.points();
+		const options = this.options();
+
+		// --- CULLING IMPLEMENTATION START ---
+
+		/**
+		 * CULLING CONFIGURATION
+		 * 
+		 * We rely on the core `getToolCullingState` utility to determine precise visibility.
+		 * 1. We provide the logical points (Timestamp/Price).
+		 * 2. We provide the 'extend' configuration (left/right).
+		 * 
+		 * The engine calculates if the line segment (or its infinite projection) 
+		 * enters the visible area of the chart.
+		 */
+		const cullingState = getToolCullingState(
+			points, 
+			this, 
+			options.line.extend
+		);
+
+		/**
+		 * FINAL STATE ASSIGNMENT
+		 * 
+		 * If the result is anything other than 'Visible' (e.g., OffScreenTop, OffScreenLeft, etc.),
+		 * the tool is marked as culled. This boolean flag is then consumed by the Views 
+		 * to bypass expensive rendering logic.
+		 */
+		this._setIsCulled(cullingState !== OffScreenState.Visible);
+
+		// --- CULLING IMPLEMENTATION END ---
+	}	
 }

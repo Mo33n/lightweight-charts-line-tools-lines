@@ -13,8 +13,6 @@ import {
 	CompositeRenderer,
 	SegmentRenderer,
 	AnchorPoint,
-	OffScreenState,
-	getToolCullingState,
 	LineOptions,
 	LineToolOptionsInternal,
 	deepCopy,
@@ -85,31 +83,16 @@ export class LineToolCrossLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 			return;
 		}
 
-		// --- CULLING IMPLEMENTATION START ---
-		// A CrossLine is visible if the single anchor point is on screen.
 		/**
-         * 1. CULLING & VISIBILITY CHECK
-         *
-         * A Cross Line is infinite in both directions.
-         * We pass `{ horizontal: true, vertical: true }` to the culler.
-         * This tells the culling engine: "Only hide this tool if the anchor is
-         * completely off-screen in BOTH X and Y dimensions."
-         * (e.g., if the point is to the left AND above the viewport).
-         */
-		const cullingState = getToolCullingState(
-			points, 
-			this._tool as BaseLineTool<HorzScaleItem>, 
-			options.line.extend, 
-			{ horizontal: true, vertical: true } // Dual infinite component
-		);
-		// Note: A CrossLine is technically visible if the point's X is on screen OR Y is on screen,
-		// but since it's infinite in both directions, it's only culled if the point's X is outside
-		// the X-range AND the Y is outside the Y-range (i.e., fully off-screen X and Y).
-		if (cullingState !== OffScreenState.Visible) {
-			//console.log('cross line tool culled')
-			return; // Exit if culled
+		 * CULLING CHECK
+		 * 
+		 * We query the pre-calculated culling state from the Model. 
+		 * If the Model has determined the tool's intersection point is too far 
+		 * away for its crosshair lines to be visible, we exit early.
+		 */
+		if (this._tool.isCulled()) {
+			return;
 		}
-		// --- CULLING IMPLEMENTATION END ---
 
 		/**
          * 2. COORDINATE CONVERSION & DIMENSIONS

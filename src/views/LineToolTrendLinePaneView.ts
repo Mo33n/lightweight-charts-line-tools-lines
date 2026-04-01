@@ -17,8 +17,6 @@ import {
 	SegmentRenderer,
 	TextRenderer,
 	AnchorPoint,
-	OffScreenState,
-	getToolCullingState,
 	deepCopy,
 	TextRendererData,
 	PaneCursorType,
@@ -121,56 +119,16 @@ export class LineToolTrendLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 			// Do not cull if actively being drawn, but exit if points are insufficient for a line segment.
 			return;
 		}
-		
-		const points = this._tool.points(); 
-		
-		// --- CULLING IMPLEMENTATION START ---
-		
+				
 		/**
-         * 1. CULLING & VISIBILITY CHECK
-         *
-         * We rely on the `getToolCullingState` utility to determine if this tool intersects the viewport.
-         * - We pass `options.line.extend` so the culler knows to calculate intersections for infinite lines (Rays).
-         * - We cast `_tool` to `BaseLineTool` to allow access to Chart APIs for viewport calculation.
-         * - If `cullingState` is anything other than `Visible`, we exit immediately to save performance.
-         */
-		const cullingState = getToolCullingState(points, this._tool as BaseLineTool<HorzScaleItem>, options.line.extend);
-		
-		let shouldCull = false;
-
-		// 2. Apply Custom Culling Logic based on State and Extension Configuration
-		switch (cullingState) {
-			case OffScreenState.OffScreenTop:
-				shouldCull = true;
-				break;
-
-			case OffScreenState.OffScreenBottom:
-				shouldCull = true;
-				break;
-
-			case OffScreenState.OffScreenLeft:
-				shouldCull = true;
-				break;
-
-			case OffScreenState.OffScreenRight:
-				shouldCull = true;
-				break;
-
-			case OffScreenState.FullyOffScreen:
-				shouldCull = true;
-				break;
-			
-			case OffScreenState.Visible:
-			default:
-				shouldCull = false;
-				break;
+		 * CULLING CHECK
+		 * 
+		 * We query the Model's pre-calculated culling state. If the tool is off-screen, 
+		 * we exit early to avoid unnecessary coordinate math and canvas operations.
+		 */
+		if (this._tool.isCulled()) {
+			return;
 		}
-
-		if (shouldCull) {
-			//console.log('trend line culled');
-			return; // Exit early if culled
-		}
-        // --- CULLING IMPLEMENTATION END ---
 
 
 		// 3. If Visible, proceed with coordinate conversion and rendering setup

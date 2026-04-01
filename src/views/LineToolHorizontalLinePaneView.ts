@@ -15,8 +15,6 @@ import {
 	SegmentRenderer,
 	TextRenderer,
 	AnchorPoint,
-	OffScreenState,
-	getToolCullingState,
 	LineJoin,
 	LineCap,
 	LineOptions,
@@ -24,7 +22,6 @@ import {
 	BoxHorizontalAlignment,
 	deepCopy,
 	PaneCursorType,
-	SinglePointOrientation
 } from 'lightweight-charts-line-tools-core';
 
 import { LineToolHorizontalLine } from '../model/LineToolHorizontalLine';
@@ -96,28 +93,15 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 			return;
 		}
  
-		// --- 1. CULLING IMPLEMENTATION ---
-
 		/**
-		 * CULLING CONFIGURATION
-		 *
-		 * A Horizontal Line is defined by a single point but has infinite horizontal extent.
-		 * We define a `singlePointOrientation` to tell the culling engine that this point represents
-		 * a line extending infinitely along the X-axis (Time).
-		 *
-		 * `getToolCullingState` uses this to determine visibility: the tool is only hidden if
-		 * the Y-coordinate (Price) is completely off-screen. The X-coordinate is ignored for culling
-		 * because the line exists at all times.
+		 * CULLING CHECK
+		 * 
+		 * We query the Model's pre-calculated culling state. For a Horizontal Line, 
+		 * this state is primarily driven by whether the Price (Y-coordinate) 
+		 * is within the visible vertical range of the chart.
 		 */
-		const singlePointOrientation : SinglePointOrientation = {
-			horizontal: true,
-			vertical: false,
-		}
-
-		// We trust the geometric check to handle all scenarios
-		const cullingState = getToolCullingState(points, this._tool as BaseLineTool<HorzScaleItem>, options.line.extend, singlePointOrientation);
-		if (cullingState !== OffScreenState.Visible) {
-			return; // Exit if culled
+		if (this._tool.isCulled()) {
+			return;
 		}
 
 		// 2. Coordinate Conversion and Setup
@@ -156,23 +140,37 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 
         const { left: extendLeft, right: extendRight } = options.line.extend;
         
-        // Calculate the custom startX
-        if (extendLeft) {
-            // Full extension to the left edge of the pane (X=0)
-            startX = 0 as Coordinate;
-        } else {
-            // No left extension: line starts at the anchor's X position
-            startX = anchorX;
-        }
+		/**
+		 * THE DIRECTIONAL VECTOR GUARD
+		 * 
+		 * PROBLEM: If we hardcode the segment end to the viewport edge (e.g., endX = 1000) 
+		 * and the anchor point moves past that edge (e.g., anchorX = 1005), the 
+		 * vector between them flips direction (pointing Left instead of Right). 
+		 * The SegmentRenderer then projects the ray backwards across the screen.
+		 * 
+		 * SOLUTION: We use Math.min/max relative to the anchor point. This ensures 
+		 * the "boundary point" always stays on the correct side of the anchor, 
+		 * maintaining a consistent direction vector for the renderer while still 
+		 * respecting the viewport-based bounding box architecture.
+		 */
 
-        // Calculate the custom endX
-        if (extendRight) {
-            // Full extension to the right edge of the pane (X=width)
-            endX = paneDrawingWidth as Coordinate;
-        } else {
-            // No right extension: line ends at the anchor's X position
-            endX = anchorX;
-        }
+		if (extendLeft) {
+			// Ensures startX is always to the left of anchorX.
+			// If anchor is on-screen, it uses the left edge (0).
+			// If anchor passes the left edge, startX moves further left to maintain direction.
+			startX = Math.min(0, anchorX - 1) as Coordinate;
+		} else {
+			startX = anchorX;
+		}
+
+		if (extendRight) {
+			// Ensures endX is always to the right of anchorX.
+			// If anchor is on-screen, it uses the right edge (paneDrawingWidth).
+			// If anchor passes the right edge, endX moves further right to maintain direction.
+			endX = Math.max(paneDrawingWidth, anchorX + 1) as Coordinate;
+		} else {
+			endX = anchorX;
+		}
         
         // Define the two points of the segment to be drawn
         const segmentStart = new AnchorPoint(startX, lineY, 0);
@@ -218,14 +216,25 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 			const paneDrawingWidth = this._tool.getChartDrawingWidth(); // Get the true width (W_pane)
 			const horizontalAlignment = (options.text.box?.alignment?.horizontal || '').toLowerCase();
 			
-			// PIVOT BOUNDARY LOGIC
-			// The anchor's screen X is the point where the line is 'anchored'
+			/**
+			 * THE TEXT BOUNDARY GUARD
+			 * 
+			 * PROBLEM: When the anchor point moves off-screen, a naive boundary 
+			 * calculation (e.g., [anchor, 0]) can result in minX > maxX. This creates 
+			 * a "negative width" segment, causing the text's center and pivot 
+			 * calculations to fail or jump unexpectedly.
+			 * 
+			 * SOLUTION: We use Math.min and Math.max to explicitly calculate the 
+			 * 'visual floor' and 'visual ceiling' of the segment on the X-axis. 
+			 * This guarantees that segmentWidth is always positive or zero, 
+			 * ensuring stable text placement relative to the visible chart area.
+			 */
 			const anchorX = anchorPoint.x; 
 
-			// Define the X-bounds of the line segment drawn on the screen
-			// This is the X-Axis boundary for text placement
-			const minXBound = extendLeft ? 0 : anchorX;      // Start at 0 if extended left, otherwise start at anchor
-			const maxXBound = extendRight ? paneDrawingWidth : anchorX; // End at W_pane if extended right, otherwise end at anchor
+			// minXBound: The absolute leftmost point of the visible segment
+			const minXBound = Math.min(extendLeft ? 0 : anchorX, anchorX);
+			// maxXBound: The absolute rightmost point of the visible segment
+			const maxXBound = Math.max(extendRight ? paneDrawingWidth : anchorX, anchorX);
 
 			const segmentWidth = maxXBound - minXBound;
 			let textPivotX: Coordinate;

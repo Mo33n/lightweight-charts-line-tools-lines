@@ -26,6 +26,9 @@ import {
 	Point,
 	LineToolHitTestData,
 	CompositeRenderer,
+	getToolCullingState,
+	OffScreenState,
+	SinglePointOrientation,
 } from 'lightweight-charts-line-tools-core';
 
 import { LineToolHorizontalLinePaneView } from '../views/LineToolHorizontalLinePaneView';
@@ -213,4 +216,57 @@ export class LineToolHorizontalLine<HorzScaleItem> extends BaseLineTool<HorzScal
 	public override maxAnchorIndex(): number {
 		return 0; // Only one anchor point at index 0
 	}
+
+	/**
+	 * Calculates the horizontal line's visibility based on its price level and extension settings.
+	 * 
+	 * ### Tutorial Note on Horizontal Culling
+	 * A Horizontal Line is conceptually infinite in the time (X) dimension. 
+	 * 
+	 * To cull this efficiently, we inform the engine that this single anchor point 
+	 * represents a horizontal orientation. This tells the engine:
+	 * 1. If 'extend.left' and 'extend.right' are both true, only hide the tool if 
+	 *    the Price (Y) is off-screen.
+	 * 2. If it's a Ray (e.g., HorizontalRay), the engine also checks if the 
+	 *    viewport has scrolled past the anchor's start time.
+	 * 
+	 * @protected
+	 * @override
+	 */
+	protected override updateCullingState(): void {
+		const points = this.points();
+		const options = this.options();
+
+		// --- CULLING IMPLEMENTATION START ---
+
+		/**
+		 * CULLING CONFIGURATION
+		 * 
+		 * We define the 'singlePointOrientation' to let the engine know this point 
+		 * spans the horizontal axis. 
+		 * 
+		 * We pass the 'extend' options directly from the tool configuration, 
+		 * which allows this same logic to work perfectly for Horizontal Rays 
+		 * (which inherit from this class).
+		 */
+		const orientation: SinglePointOrientation = {
+			horizontal: true,
+			vertical: false,
+		};
+
+		const cullingState = getToolCullingState(
+			points, 
+			this, 
+			options.line.extend, 
+			orientation
+		);
+
+		/**
+		 * Any state result other than 'Visible' marks the tool as culled.
+		 */
+		this._setIsCulled(cullingState !== OffScreenState.Visible);
+
+		// --- CULLING IMPLEMENTATION END ---
+	}
+
 }
