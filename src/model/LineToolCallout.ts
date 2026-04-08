@@ -184,26 +184,6 @@ export class LineToolCallout<HorzScaleItem> extends LineToolTrendLine<HorzScaleI
 	}
 
 	/**
-	 * Overrides the base normalization logic to **prevent** point swapping.
-	 *
-	 * **Why override this?**
-	 * In a standard Trend Line, the order of points doesn't matter visually, so we sort them by time
-	 * to simplify math. However, a Callout has strict directionality:
-	 * - Point 0 is *always* the Pointer (Target).
-	 * - Point 1 is *always* the Text Box location.
-	 *
-	 * If we allowed normalization, dragging the text box to the left of the target would swap
-	 * the points, causing the text box to suddenly jump to the target's position and the pointer
-	 * to jump to the text's position. Overriding this with an empty function preserves the
-	 * logical relationship between the two points.
-	 *
-	 * @override
-	 */
-	public override normalize(): void {
-		// Do nothing. Prevent the callout points from being swapped based on time.
-	}
-
-	/**
 	 * Calculates the Callout's visibility based on its Stem line (P0 to P1).
 	 * 
 	 * ### Tutorial Note on Callout Culling

@@ -302,45 +302,6 @@ export class LineToolTrendLine<HorzScaleItem> extends BaseLineTool<HorzScaleItem
 	}	
 
 	/**
-	 * Re-orders the internal points so that the start point (P0) is always chronologically earlier
-	 * (to the left) than the end point (P1).
-	 *
-	 * **Why is this needed?**
-	 * Many rendering calculations (especially for Rays or Extended Lines) assume directionality.
-	 * By ensuring P0 is always the "left" point, we simplify the math for drawing extensions "to the right".
-	 *
-	 * @remarks
-	 * If the points share the exact same time, the Price is used as a tie-breaker to ensure
-	 * deterministic ordering.
-	 */
-	public normalize(): void {
-		if (this._points.length < 2) {
-			return;
-		}
-
-		// Use local variables to avoid accessing _points multiple times during conditional checks
-		let [p0, p1] = this._points;
-
-		// The primary check is Time. If P0 > P1 in time, they must be swapped.
-		if (p0.timestamp > p1.timestamp) {
-			this._points = [p1, p0]; // Swap the references in the array
-			return;
-		}
-
-		// Tie-Breaker: If times are identical (vertical line segment)
-		if (p0.timestamp === p1.timestamp) {
-			// Use price as a stable tie-breaker to ensure a predictable order (e.g., P0 is always the lower price)
-			if (p0.price > p1.price) {
-				this._points = [p1, p0]; // Swap if P0 is higher price
-				return;
-			}
-			// If prices are identical, no swap is necessary, and the tool is effectively a single point.
-		}
-
-		// If no swap was necessary, the array remains [p0, p1], and they are already in the correct order.
-	}
-
-	/**
 	 * Updates the logical coordinates of a specific anchor point.
 	 *
 	 * While this implementation currently delegates directly to the base class, overriding it here
