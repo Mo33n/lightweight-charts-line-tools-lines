@@ -50,7 +50,8 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 	 * Internal renderer for the optional text label.
 	 * @protected
 	 */
-	protected _textRenderer: TextRenderer<HorzScaleItem> = new TextRenderer();
+	//testing removal
+	//protected _textRenderer: TextRenderer<HorzScaleItem> = new TextRenderer();
 
 	/**
 	 * Initializes the Horizontal Line View.
@@ -275,9 +276,11 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 				toolDefaultHoverCursor: options.defaultHoverCursor,
 				toolDefaultDragCursor: options.defaultDragCursor,
 			};
-
-			this._textRenderer.setData(textRendererData);
-			(this._renderer as CompositeRenderer<HorzScaleItem>).append(this._textRenderer);
+			//testing removal
+			//this._textRenderer.setData(textRendererData);
+			this._labelRenderer.setData(textRendererData);
+			//(this._renderer as CompositeRenderer<HorzScaleItem>).append(this._textRenderer);
+			(this._renderer as CompositeRenderer<HorzScaleItem>).append(this._labelRenderer);
 		}
 
 

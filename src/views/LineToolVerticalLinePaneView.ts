@@ -22,6 +22,7 @@ import {
 	deepCopy,
 	PaneCursorType,
 	BoxHorizontalAlignment,
+	BoxVerticalAlignment,
 } from 'lightweight-charts-line-tools-core';
 
 import { LineToolVerticalLine } from '../model/LineToolVerticalLine';
@@ -50,7 +51,7 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 	 * Internal renderer for the optional text label.
 	 * @protected
 	 */
-	protected _textRenderer: TextRenderer<HorzScaleItem> = new TextRenderer();
+	//protected _textRenderer: TextRenderer<HorzScaleItem> = new TextRenderer();
 
 	/**
 	 * Initializes the Vertical Line View.
@@ -165,91 +166,79 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 		if (options.text.value) {
 			
 			// --- Conditional Vertical Rotation ---
-			// V3.8 behavior: The tool's natural orientation is vertical (90 degrees).
-			// We add 90 degrees to the user's defined angle (which is 0 by default).
-			// This makes the user's 'angle' setting relative to the vertical axis.
+			// By default, text is calculated horizontally. For a vertical line, we 
+			// rotate the entire box 90 degrees so it aligns parallel to the line. 
+			// We add 90 to the user's defined angle to make their setting relative 
+			// to this vertical orientation.
 			const userAngle = options.text.box?.angle || 0;
 			const textOptions = deepCopy(options.text);
 			textOptions.box = { ...textOptions.box, angle: userAngle + 90 };
 			// --- End Conditional Rotation ---
-			
-			// 1. Measure the text box size (Must use the rotated options)
-			// Temporarily set data to measure the box's dimensions
-			const tempTextRendererData = {
-				points: [], // Points not needed for measure
-				text: textOptions,
-			};
-			this._textRenderer.setData(tempTextRendererData);
-			const boxDimensions = this._textRenderer.measure(); // { width: unscaled, height: unscaled }
-			//console.log('boxDimensions', boxDimensions)
 
 			// --- Text Attachment Point (Pivot) Calculation ---
 			
 			/**
-			 * TEXT ROTATION & ALIGNMENT LOGIC
+			 * TEXT ROTATION & ALIGNMENT LOGIC (Vertical Hugging)
 			 *
-			 * Vertical lines have standard text rotated 90 degrees.
-			 * 1. **Rotation:** We add 90 degrees to the user's angle setting.
-			 * 2. **Alignment Mapping:** Standard "Left/Right" alignment doesn't make sense vertically.
-			 *    - "Right" (Forward in time) maps to the **Top** of the screen (Y=0).
-			 *    - "Left" (Backward in time) maps to the **Bottom** of the screen (Y=Height).
-			 *    - We also apply offsets based on the measured text width (which becomes height after rotation)
-			 *      to ensure the text doesn't get cut off at the edges.
+			 * To provide a consistent experience across tools, we map the 
+			 * user's "Horizontal Alignment" settings to the vertical span 
+			 * of the vertical line:
+			 * 
+			 * 1. "Right" Intention -> Sticks to the Top of the screen (Y=0).
+			 * 2. "Left" Intention  -> Sticks to the Bottom of the screen (Y=Height).
+			 * 3. "Center" Intention -> Remains at the vertical midpoint.
+			 * 
+			 * To "hug" the edges without a large gap, we place the pivot exactly 
+			 * at the edge and override the box's vertical expansion direction.
 			 */
-			const textAlignment = options.text.alignment.toLowerCase();
+			const horizontalAlignment = (options.text.box?.alignment?.horizontal || '').toLowerCase();
 			let textPivotY: Coordinate;
 
-			// We need the measured text box's vertical span for alignment compensation.
-			// For vertical alignment (Top/Bottom/Middle), the compensation for text being 
-			// cut off at the vertical extremes is based on the box's vertical span.
-			// since the text is intially calculated horizontally, and the vertical tool is artificially rotating it, we need
-			// to use boxDimensions.width for the rotated boxes heght from the bottom of the screen to the top of the screen.
-			const textVerticalSpan = boxDimensions.width;
-			const halfVerticalSpan = textVerticalSpan / 2;
-
-
-			// Check Horizontal Alignment to determine the Y-pivot position along the vertical line
-			// This maps the user's X-axis alignment intention (Left/Right) to the vertical Y-axis extremes.
-			switch (textAlignment) {
+			switch (horizontalAlignment) {
 				case BoxHorizontalAlignment.Right.toLowerCase(): 
-					// Right (latest/highest) -> Top of screen (Y=0)
-					// Shift the center DOWN by half the box's vertical span to prevent cut-off.
-					textPivotY = (0 + halfVerticalSpan) as Coordinate; 
+					// Pivot at the absolute top edge
+					textPivotY = 0 as Coordinate; 
+					// Force the box to expand DOWNWARDS from the top edge
 					break;
 				case BoxHorizontalAlignment.Left.toLowerCase(): 
-					// Left (earliest/lowest) -> Bottom of screen (Y=paneDrawingHeight)
-					// Shift the center UP by half the box's vertical span to prevent cut-off.
-					textPivotY = (paneDrawingHeight - halfVerticalSpan) as Coordinate;
+					// Pivot at the absolute bottom edge (paneDrawingHeight)
+					textPivotY = paneDrawingHeight as Coordinate; 
+					// Force the box to expand UPWARDS from the bottom edge
 					break;
 				case BoxHorizontalAlignment.Center.toLowerCase():
 				default:
-					// Center -> Center Y-value (for vertical line)
+					// Pivot at the exact center of the visible pane
 					textPivotY = (paneDrawingHeight / 2) as Coordinate;
+					// Ensure the box remains centered on the middle pivot
 					break;
 			}
 
-			// Text Attachment Point (X is the line's position, Y is the calculated pivot)
+			// Define the anchor point for the text box.
+			// X matches the line's position; Y is our calculated "edge" pivot.
 			const textAttachmentPoint = new AnchorPoint(lineX, textPivotY, 0); 
-
-			// 2. Final Data Setup and Render
 
 			/**
 			 * TEXT RENDERER DATA SETUP
 			 *
-			 * - `points`: We use the calculated `textAttachmentPoint` which places the text
-			 *   at the correct vertical position along the line.
-			 * - `text`: Contains the rotated options.
+			 * We pass the modified textOptions which now contain the 
+			 * corrected 'vertical' expansion to hug the screen edges.
+			 * 
+			 * Note: We use the inherited 'this._labelRenderer' to ensure that 
+			 * the 'forceInvalidate' signal from the core plugin correctly 
+			 * clears the layout cache when options are changed.
 			 */
 			const textRendererData = {
-				points: [textAttachmentPoint], // Text anchor is the single point
-				text: textOptions, 
-				hitTestBackground: true, 
+				// Use the calculated edge-aligned pivot
+				points: [textAttachmentPoint], 
+				text: textOptions, 
+				// Enabled to allow selection via the text label area
+				hitTestBackground: true, 
 				toolDefaultHoverCursor: options.defaultHoverCursor,
 				toolDefaultDragCursor: options.defaultDragCursor,
 			};
 
-			this._textRenderer.setData(textRendererData);
-			compositeRenderer.append(this._textRenderer);
+			this._labelRenderer.setData(textRendererData);
+			compositeRenderer.append(this._labelRenderer);
 		}
 
 		// 3. Line Anchors (Handles for P1)
