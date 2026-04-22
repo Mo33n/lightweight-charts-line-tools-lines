@@ -142,7 +142,7 @@ export class LineToolHorizontalLine<HorzScaleItem> extends BaseLineTool<HorzScal
 		// 5. Set the specific PaneView for this tool.
 		this._setPaneViews([new LineToolHorizontalLinePaneView(this, this._chart, this._series)]);
 
-		console.log(`HorizontalLine Tool created with ID: ${this.id()}`);
+		//console.log(`HorizontalLine Tool created with ID: ${this.id()}`);
 	}
 
 	/**
