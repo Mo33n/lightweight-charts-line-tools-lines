@@ -121,19 +121,20 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 		const lineX = anchorPoint.x; // The X-coordinate is the same for both
 		
 		/**
-		 * SEGMENT CALCULATION
-		 *
-		 * We manually construct the vertical segment.
-		 * - `pTop`: X = anchor, Y = 0 (Top of pane).
-		 * - `pBottom`: X = anchor, Y = paneHeight (Bottom of pane).
-		 *
-		 * This creates a finite segment that covers the exact visible area.
+		 * CONSISTENCY FIX: RIGHT = TOP
+		 * 
+		 * We manufacture the segment from Bottom to Top.
+		 * Index 0 (Start/Left) = Bottom of screen.
+		 * Index 1 (End/Right)  = Top of screen.
+		 * 
+		 * This ensures that 'line.end.right' places an arrow at the TOP,
+		 * matching the 'BoxHorizontalAlignment.Right' text logic.
 		 */
-		const pTop = new AnchorPoint(lineX, 0 as Coordinate, 0); // P_Top (Y=0)
-		const pBottom = new AnchorPoint(lineX, paneDrawingHeight as Coordinate, 0); // P_Bottom (Y=paneHeight)
+		const pBottom = new AnchorPoint(lineX, paneDrawingHeight as Coordinate, 0);
+		const pTop = new AnchorPoint(lineX, 0 as Coordinate, 0);
 
-		// The core segment being drawn is between P_Top and P_Bottom.
-		const segmentPoints: [AnchorPoint, AnchorPoint] = [pTop, pBottom];
+		// Pass points in Bottom -> Top order
+		const segmentPoints: [AnchorPoint, AnchorPoint] = [pBottom, pTop];
 
 		// --- Setup Renderers ---
 		const compositeRenderer = new CompositeRenderer<HorzScaleItem>();
