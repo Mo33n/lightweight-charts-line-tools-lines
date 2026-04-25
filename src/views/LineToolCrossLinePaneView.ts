@@ -61,7 +61,8 @@ export class LineToolCrossLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 	 * The core update logic.
 	 *
 	 * It translates the single logical anchor point into two full-screen segments
-	 * (Horizontal and Vertical) and configures separate renderers for each.
+	 * (Horizontal and Vertical) using stable 1-pixel vectors to prevent 
+	 * directional flipping in the buffer zones.
 	 *
 	 * @param height - The height of the pane.
 	 * @param width - The width of the pane.
@@ -78,7 +79,7 @@ export class LineToolCrossLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 			return;
 		}
 
-		const points = this._tool.points(); 
+		const points = this._tool.points(); 
 		if (points.length < 1) {
 			return;
 		}
@@ -87,8 +88,6 @@ export class LineToolCrossLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 		 * CULLING CHECK
 		 * 
 		 * We query the pre-calculated culling state from the Model. 
-		 * If the Model has determined the tool's intersection point is too far 
-		 * away for its crosshair lines to be visible, we exit early.
 		 */
 		if (this._tool.isCulled()) {
 			return;
@@ -96,86 +95,61 @@ export class LineToolCrossLinePaneView<HorzScaleItem> extends LineToolPaneView<H
 
 		/**
          * 2. COORDINATE CONVERSION & DIMENSIONS
-         *
-         * We convert the single anchor to screen coordinates.
-         * We also retrieve the exact drawing dimensions of the pane. This is crucial
-         * for defining the start/end points of our "infinite" lines.
          */
-		const hasScreenPoints = this._updatePoints(); 
+		const hasScreenPoints = this._updatePoints(); 
 		if (!hasScreenPoints) {
 			return;
 		}
 
-		const [anchorPoint] = this._points; // Screen coordinates of the single anchor
+const [anchorPoint] = this._points; 
 		const lineX = anchorPoint.x;
 		const lineY = anchorPoint.y;
-
-		// --- Setup Renderers ---
-		const compositeRenderer = new CompositeRenderer<HorzScaleItem>();
-
-		// We need to use the explicit drawing width/height from the tool's core method
 		const paneDrawingHeight = this._tool.getChartDrawingHeight();
 		const paneDrawingWidth = this._tool.getChartDrawingWidth();
 
-		// Use the line options, but must ensure X-extension is false for the segment renderer
+		const compositeRenderer = new CompositeRenderer<HorzScaleItem>();
+
 		const lineOptions = deepCopy(options.line) as any;
 		lineOptions.join = lineOptions.join || LineJoin.Miter;
 		lineOptions.cap = lineOptions.cap || LineCap.Butt;
-		lineOptions.extend = { left: false, right: false }; 
+		lineOptions.extend = { left: false, right: false }; // Already spanned manually
 
-		/**
-         * 3. RENDERER MANUFACTURE
-         *
-         * We manually create two distinct segments:
-         * A. **Vertical Segment:** Fixed X, spanning from Y=0 to Y=Height.
-         * B. **Horizontal Segment:** Fixed Y, spanning from X=0 to X=Width.
-         *
-         * We use separate renderers (`_verticalRenderer`, `_horizontalRenderer`) to
-         * ensure they can be hit-tested independently if needed.
-         */
 		const commonSegmentOptions: LineOptions = lineOptions as LineOptions;
 		const commonCursorOptions = {
 			toolDefaultHoverCursor: options.defaultHoverCursor,
 			toolDefaultDragCursor: options.defaultDragCursor,
 		};
 
-
-		// 1. Vertical Segment (Full Height)
-		const pTop = new AnchorPoint(lineX, 0 as Coordinate, 0); 
-		const pBottom = new AnchorPoint(lineX, paneDrawingHeight as Coordinate, 0);
-		
 		/**
-		 * Internal renderer for the infinite vertical segment of the crosshair.
-		 * @protected
+		 * Vertical Segment: Bottom edge (0) to Top edge (Height).
+		 * semantic 'right' = Top.
 		 */
-		this._verticalRenderer.setData({ 
-			points: [pTop, pBottom], 
+		const vP0 = new AnchorPoint(lineX, paneDrawingHeight as Coordinate, 0);
+		const vP1 = new AnchorPoint(lineX, 0 as Coordinate, 0);
+		
+		this._verticalRenderer.setData({ 
+			points: [vP0, vP1], 
 			line: commonSegmentOptions,
 			...commonCursorOptions,
 		});
 		compositeRenderer.append(this._verticalRenderer);
 
-
-		// 2. Horizontal Segment (Full Width)
-		const pLeft = new AnchorPoint(0 as Coordinate, lineY, 0); 
-		const pRight = new AnchorPoint(paneDrawingWidth as Coordinate, lineY, 0);
-		
 		/**
-		 * Internal renderer for the infinite horizontal segment of the crosshair.
-		 * @protected
+		 * Horizontal Segment: Left edge (0) to Right edge (Width).
+		 * semantic 'right' = Right.
 		 */
-		this._horizontalRenderer.setData({ 
-			points: [pLeft, pRight], 
+		const hP0 = new AnchorPoint(0 as Coordinate, lineY, 0);
+		const hP1 = new AnchorPoint(paneDrawingWidth as Coordinate, lineY, 0);
+		
+		this._horizontalRenderer.setData({ 
+			points: [hP0, hP1], 
 			line: commonSegmentOptions,
 			...commonCursorOptions,
 		});
 		compositeRenderer.append(this._horizontalRenderer);
 
-
-		// 3. Line Anchors (Handles for P1)
-		//if (this.areAnchorsVisible()) {
-			this._addAnchors(compositeRenderer);
-		//}
+		// 3. Line Anchors (Handle for Intersection Point)
+		this._addAnchors(compositeRenderer);
 
 		this._renderer = compositeRenderer;
 	}

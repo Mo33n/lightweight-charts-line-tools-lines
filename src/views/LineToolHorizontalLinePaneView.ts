@@ -72,8 +72,8 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 	 * The core update logic for the Horizontal Line View.
 	 *
 	 * It translates the single logical anchor point into a horizontal segment.
-	 * To ensure arrows (line ends) appear at the screen edges, we calculate 
-	 * the physical boundaries (0 and Width) and pass them to the renderer.
+	 * To prevent directional flipping in the buffer zone, we provide a stable 
+	 * 1-pixel vector and utilize the renderer's internal extension engine.
 	 *
 	 * @param height - The height of the pane.
 	 * @param width - The width of the pane.
@@ -112,7 +112,7 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 
 		const [anchorPoint] = this._points; // Screen coordinates of the single anchor
         
-		// --- 3. Vector Manufacture: Mapping to Screen Edges ---
+		// --- 3. Vector Manufacture: Stable Spacial Vector ---
 		
 		const anchorX = anchorPoint.x; 
 		const lineY = anchorPoint.y;
@@ -120,34 +120,27 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 		const { left: extendLeft, right: extendRight } = options.line.extend;
 
 		/**
-		 * BOUNDARY CALCULATION
+		 * To ensure arrowheads render at the screen edges, we must provide 
+		 * the edge coordinates to the renderer. 
 		 * 
-		 * To ensure 'line.end.right' and 'line.end.left' sit at the screen edges:
-		 * - If extend.left is true, the left end is at pixel 0.
-		 * - If extend.right is true, the right end is at paneDrawingWidth.
-		 * - Otherwise, the end sits at the anchor point.
+		 * To prevent the "Flip" bug: We force the Right Point to always 
+		 * be at least 1px to the right of the Left Point.
 		 */
 		const startX = extendLeft ? 0 : anchorX;
 		const endX = extendRight ? paneDrawingWidth : anchorX;
 
-		// We ensure a minimum width of 1px so the SegmentRenderer can determine direction
-		const finalEndX = (startX === endX) ? endX + 1 : endX;
+		// The Guard: Ensure vector always points Left -> Right
+		const finalStartX = startX;
+		const finalEndX = Math.max(endX, startX + 1);
 
-		const leftPoint = new AnchorPoint(startX as Coordinate, lineY, 0);
+		const leftPoint = new AnchorPoint(finalStartX as Coordinate, lineY, 0);
 		const rightPoint = new AnchorPoint(finalEndX as Coordinate, lineY, 1);
 
-		// --- 4. Line Rendering: SegmentRenderer ---
-		
+		// --- Line Rendering ---
 		const lineOptions = deepCopy(options.line) as any;
 		lineOptions.join = lineOptions.join || LineJoin.Miter;
 		lineOptions.cap = lineOptions.cap || LineCap.Butt;
 
-		/**
-		 * LINE RENDERER DATA SETUP
-		 * 
-		 * We pass the calculated edge points. The SegmentRenderer will now
-		 * draw the arrows at these exact edge coordinates.
-		 */
 		this._lineRenderer.setData({ 
 			points: [leftPoint, rightPoint], 
 			line: lineOptions as LineOptions,
@@ -161,15 +154,20 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 
 		if (options.text.value) {
 			const horizontalAlignment = (options.text.box?.alignment?.horizontal || '').toLowerCase();
+			const paneDrawingWidth = this._tool.getChartDrawingWidth();
+			const { left: extendLeft, right: extendRight } = options.line.extend;
 
 			/**
 			 * THE TEXT BOUNDARY GUARD
 			 * 
-			 * We reuse the calculated startX and endX to ensure the text 
-			 * alignment perfectly matches the line endpoints/arrows.
+			 * We determine the "visual" start and end of the segment to align 
+			 * the text pivot correctly relative to the current viewport.
 			 */
-			const minXBound = Math.min(startX, endX);
-			const maxXBound = Math.max(startX, endX);
+			const visualStartX = extendLeft ? 0 : anchorX;
+			const visualEndX = extendRight ? paneDrawingWidth : anchorX;
+
+			const minXBound = Math.min(visualStartX, visualEndX);
+			const maxXBound = Math.max(visualStartX, visualEndX);
 			const segmentWidth = maxXBound - minXBound;
 
 			let textPivotX: Coordinate;
@@ -179,8 +177,6 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 					textPivotX = minXBound as Coordinate;
 					break;
 				case BoxHorizontalAlignment.Right.toLowerCase():
-					// Since paneDrawingWidth excludes the price axis, this 
-					// will be perfectly hugged against the right edge.
 					textPivotX = maxXBound as Coordinate;
 					break;
 				case BoxHorizontalAlignment.Center.toLowerCase():
@@ -206,6 +202,7 @@ export class LineToolHorizontalLinePaneView<HorzScaleItem> extends LineToolPaneV
 		// 6. Line Anchors (Handle for the single point)
 		this._addAnchors(this._renderer as CompositeRenderer<HorzScaleItem>);
 	}
+	
 	
 	/**
 	 * Adds the single interactive anchor point.

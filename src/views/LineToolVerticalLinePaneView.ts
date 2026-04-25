@@ -71,9 +71,8 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 	/**
 	 * The core update logic.
 	 *
-	 * It translates the single logical anchor point into a vertical segment spanning the full height
-	 * of the chart pane. It also handles the complex logic of rotating text 90 degrees and
-	 * re-mapping alignment settings (e.g., "Left" alignment becomes "Bottom" on a vertical line).
+	 * It translates the single logical anchor point into a vertical segment 
+	 * spanning the full height of the chart pane using a stable 1-pixel vector.
 	 *
 	 * @param height - The height of the pane.
 	 * @param width - The width of the pane.
@@ -90,149 +89,80 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 			return;
 		}
 
-		const points = this._tool.points(); 
+		const points = this._tool.points(); 
 		if (points.length < 1) {
 			return;
 		}
 
 		/**
 		 * CULLING CHECK
-		 * We simply query the pre-calculated state from the Model.
 		 */
 		if (this._tool.isCulled()) {
 			return;
 		}
 
-		// --- GET VALIDATED CHART DRAWING HEIGHT ---
-		// Use the validated method to get the definitive height of the drawing pane of the chart area only.
-		const paneDrawingHeight = this._tool.getChartDrawingHeight();
-		//const paneDrawingWidth = this._tool.getChartDrawingWidth();
-
 		// 1. Convert the single logical point (P1) to a screen anchor.
-		// We can use the base implementation to get the screen coordinate of P1.
-		const hasScreenPoints = this._updatePoints(); 
+		const hasScreenPoints = this._updatePoints(); 
 		if (!hasScreenPoints) {
 			return;
 		}
 
-		const [anchorPoint] = this._points; // Screen coordinates of the single anchor
+		const [anchorPoint] = this._points; 
+		const lineX = anchorPoint.x; 
+		const paneDrawingHeight = this._tool.getChartDrawingHeight();
 
-		// 2. Manufacture two screen points for the vertical segment (P_Top and P_Bottom).
-		const lineX = anchorPoint.x; // The X-coordinate is the same for both
-		
 		/**
-		 * CONSISTENCY FIX: RIGHT = TOP
-		 * 
-		 * We manufacture the segment from Bottom to Top.
-		 * Index 0 (Start/Left) = Bottom of screen.
-		 * Index 1 (End/Right)  = Top of screen.
-		 * 
-		 * This ensures that 'line.end.right' places an arrow at the TOP,
-		 * matching the 'BoxHorizontalAlignment.Right' text logic.
+		 * We map the segment from the Bottom of the pane to the Top.
+		 * Index 0 (Left/Start) = Bottom
+		 * Index 1 (Right/End) = Top
+		 * This ensures 'line.end.right' arrow appears at the TOP.
 		 */
 		const pBottom = new AnchorPoint(lineX, paneDrawingHeight as Coordinate, 0);
 		const pTop = new AnchorPoint(lineX, 0 as Coordinate, 0);
 
-		// Pass points in Bottom -> Top order
-		const segmentPoints: [AnchorPoint, AnchorPoint] = [pBottom, pTop];
-
-		// --- Setup Renderers ---
 		const compositeRenderer = new CompositeRenderer<HorzScaleItem>();
 
-		// 1. Segment Renderer (The Vertical Line itself)
 		const lineOptions = deepCopy(options.line) as any;
 		lineOptions.join = lineOptions.join || LineJoin.Miter;
 		lineOptions.cap = lineOptions.cap || LineCap.Butt;
+		lineOptions.extend = { left: false, right: false }; // Spanned manually
 
-		// The Vertical Line does not use extension logic in the SegmentRenderer call,
-		// as it is already drawn full-pane-height via P_Top and P_Bottom.
-		//lineOptions.extend = { left: false, right: false }; 
-
-		/**
-		 * LINE RENDERER DATA SETUP
-		 *
-		 * We configure the `SegmentRenderer` with our manually created vertical segment.
-		 * Explicitly defining the start/end points ensures hit-testing works perfectly
-		 * from the very top to the very bottom of the chart.
-		 */
-		this._lineRenderer.setData({ 
-			points: segmentPoints, 
+		this._lineRenderer.setData({ 
+			points: [pBottom, pTop], 
 			line: lineOptions as LineOptions,
 			toolDefaultHoverCursor: options.defaultHoverCursor,
 			toolDefaultDragCursor: options.defaultDragCursor,
 		});
 		compositeRenderer.append(this._lineRenderer);
 
-		// 2. Text Renderer (If applicable - typically not used for a simple vertical line)
+		// 4. Text Renderer (If applicable)
 		if (options.text.value) {
-			
-			// --- Conditional Vertical Rotation ---
-			// By default, text is calculated horizontally. For a vertical line, we 
-			// rotate the entire box 90 degrees so it aligns parallel to the line. 
-			// We add 90 to the user's defined angle to make their setting relative 
-			// to this vertical orientation.
+			const paneDrawingHeight = this._tool.getChartDrawingHeight();
 			const userAngle = options.text.box?.angle || 0;
 			const textOptions = deepCopy(options.text);
 			textOptions.box = { ...textOptions.box, angle: userAngle + 90 };
-			// --- End Conditional Rotation ---
 
-			// --- Text Attachment Point (Pivot) Calculation ---
-			
-			/**
-			 * TEXT ROTATION & ALIGNMENT LOGIC (Vertical Hugging)
-			 *
-			 * To provide a consistent experience across tools, we map the 
-			 * user's "Horizontal Alignment" settings to the vertical span 
-			 * of the vertical line:
-			 * 
-			 * 1. "Right" Intention -> Sticks to the Top of the screen (Y=0).
-			 * 2. "Left" Intention  -> Sticks to the Bottom of the screen (Y=Height).
-			 * 3. "Center" Intention -> Remains at the vertical midpoint.
-			 * 
-			 * To "hug" the edges without a large gap, we place the pivot exactly 
-			 * at the edge and override the box's vertical expansion direction.
-			 */
 			const horizontalAlignment = (options.text.box?.alignment?.horizontal || '').toLowerCase();
 			let textPivotY: Coordinate;
 
 			switch (horizontalAlignment) {
 				case BoxHorizontalAlignment.Right.toLowerCase(): 
-					// Pivot at the absolute top edge
 					textPivotY = 0 as Coordinate; 
-					// Force the box to expand DOWNWARDS from the top edge
 					break;
 				case BoxHorizontalAlignment.Left.toLowerCase(): 
-					// Pivot at the absolute bottom edge (paneDrawingHeight)
 					textPivotY = paneDrawingHeight as Coordinate; 
-					// Force the box to expand UPWARDS from the bottom edge
 					break;
 				case BoxHorizontalAlignment.Center.toLowerCase():
 				default:
-					// Pivot at the exact center of the visible pane
 					textPivotY = (paneDrawingHeight / 2) as Coordinate;
-					// Ensure the box remains centered on the middle pivot
 					break;
 			}
 
-			// Define the anchor point for the text box.
-			// X matches the line's position; Y is our calculated "edge" pivot.
 			const textAttachmentPoint = new AnchorPoint(lineX, textPivotY, 0); 
 
-			/**
-			 * TEXT RENDERER DATA SETUP
-			 *
-			 * We pass the modified textOptions which now contain the 
-			 * corrected 'vertical' expansion to hug the screen edges.
-			 * 
-			 * Note: We use the inherited 'this._labelRenderer' to ensure that 
-			 * the 'forceInvalidate' signal from the core plugin correctly 
-			 * clears the layout cache when options are changed.
-			 */
 			const textRendererData = {
-				// Use the calculated edge-aligned pivot
 				points: [textAttachmentPoint], 
 				text: textOptions, 
-				// Enabled to allow selection via the text label area
 				hitTestBackground: true, 
 				toolDefaultHoverCursor: options.defaultHoverCursor,
 				toolDefaultDragCursor: options.defaultDragCursor,
@@ -242,10 +172,8 @@ export class LineToolVerticalLinePaneView<HorzScaleItem> extends LineToolPaneVie
 			compositeRenderer.append(this._labelRenderer);
 		}
 
-		// 3. Line Anchors (Handles for P1)
-		//if (this.areAnchorsVisible()) {
-			this._addAnchors(compositeRenderer);
-		//}
+		// 5. Line Anchors (Handle for the intersection)
+		this._addAnchors(compositeRenderer);
 
 		this._renderer = compositeRenderer;
 	}
